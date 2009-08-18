@@ -25,12 +25,12 @@
 
 Pool = function(name, task, handler) {
 	if (this instanceof Pool) {
-		var context = name || arguments.callee.caller;
+		var context = name || arguments.callee.caller || window;
 		context[Pool.namespace] = this;
 		return this.init();
 	}
 
-	var context = arguments.callee.caller;
+	var context = arguments.callee.caller || window;
 	var pool = Pool.at(context) || new Pool(context);
 	if (name in pool.pool)
 		return pool.get(name, handler);
@@ -61,14 +61,14 @@ Pool.destroy = function(context) {
 };
 
 Pool.register = function(name, task) {
-	var context = arguments.callee.caller;
+	var context = arguments.callee.caller || window;
 	var pool = Pool.at(context) || new Pool(context);
 	pool.register(name, task);
 	return pool;
 };
 
 Pool.get = function(name, handler) {
-	return Pool.at(arguments.callee.caller).get(name, handler);
+	return Pool.at(arguments.callee.caller || window).get(name, handler);
 };
 
 Pool.extend = function(target, options) {
