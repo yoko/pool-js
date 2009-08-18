@@ -1,0 +1,195 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+<title>pool.js</title>
+<link rel="stylesheet" type="text/css" href="http://jqueryjs.googlecode.com/svn/trunk/qunit/testsuite.css"/>
+<script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.3/jquery.min.js"></script>
+<script type="text/javascript" src="http://jqueryjs.googlecode.com/svn/trunk/qunit/testrunner.js"></script>
+<script type="text/javascript" src="http://github.com/cho45/jsdeferred/raw/master/jsdeferred.jquery.js"></script>
+<script type="text/javascript" src="pool.js"></script>
+</head>
+<body>
+<h1>pool.js</h1>
+<h2 id="banner"></h2>
+<h2 id="userAgent"></h2>
+<ol id="tests"></ol>
+<div id="main"></div>
+
+<script type="text/javascript">
+module('Pool');
+
+test('Pool', function callee() {
+	var ret = Pool('foo', function() { return 'foo'; });
+	ok(callee.__pool__ instanceof Pool);
+	equals(ret, 'foo');
+
+	var ret = Pool('foo', function() { return 'bar'; });
+	ok(ret, 'foo', 'from cache, through function');
+
+	equals(Pool('foo'), 'foo');
+});
+
+test('at', function() {
+	var obj = {};
+	window.__pool__ = obj;
+	equals(Pool.at(window), obj);
+	Pool.__storage__ = obj;
+	equals(Pool.at('storage'), obj);
+
+	same(Pool.at(arguments.callee), undefined);
+	same(Pool.at(), undefined);
+});
+
+test('destroy', function callee() {
+	var pool = new Pool;
+	Pool.destroy(callee);
+	ok (!('__pool__' in callee), 'delete');
+});
+
+test('register, get', function callee() {
+	var f = function() { return 'foo'; };
+
+	var ret = Pool.register('foo', f);
+	ok(ret instanceof Pool, 'return Pool instance');
+	ok(callee.__pool__ instanceof Pool, 'bind to callee function object');
+	same(ret, callee.__pool__);
+	same(callee.__pool__.tasks.foo, f, 'register');
+
+	equals(Pool.get('foo'), 'foo');
+	Pool.get('foo', function(data) {
+		equals(data, 'foo', 'callback');
+	});
+});
+
+test('extend', function() {
+	var obj = {};
+	var ret = Pool.extend(obj, { a: 1 });
+	equals(ret, obj, 'return same ref');
+	equals(ret.a, 1, 'extended');
+	equals(Pool.extend({ a: 1 }, { a: 2 }).a, 2, 'override value');
+});
+
+test('makeArray', function() {
+	var obj = { 0: 'a', 1: 'b', length: 2 };
+	ok($.isArray(Pool.makeArray(obj)), 'array-like object to true array');
+	var obj = { a: 1, b: 2 };
+	same(Pool.makeArray(obj), [], 'non array-like object to empty array');
+	same(Pool.makeArray({}), [], 'empty object to empty array');
+	same(Pool.makeArray(123), [], 'non object to empty array');
+});
+
+
+module('Pool Class');
+
+test('init is constractor', function() {
+	var pool = new Pool();
+	same(pool.init(), pool, 'return this');
+
+	var pool = new Pool(window);
+});
+
+test('list', function() {
+	var pool = new Pool();
+	pool.pool = { a: 1 };
+	same(pool.list(), pool.pool);
+	ok(pool.list() !== pool.pool, 'it is copy');
+});
+
+test('clear', function() {
+	var pool = new Pool;
+	pool.register('foo', 'foo');
+
+	pool.clear('foo');
+	ok(!('foo' in pool.pool), 'delete');
+	equals(pool.get('foo'), 'foo', 'still exist task');
+
+	pool.clear('foo', true);
+	same(pool.get('foo'), undefined);	
+});
+
+test('register', function() {
+	var pool = new Pool;
+	var f = function() {
+		return 'foo';
+	};
+	same(pool.register('foo', f), pool, 'method chain is ok');
+	same(pool.tasks.foo, f, 'register');
+	ok(!('foo' in pool.pool), 'not run yet');
+
+	var f2 = function() {
+		return 'bar';
+	};
+	pool.register('foo', f2);
+	same(pool.tasks.foo, f2, 'override');
+});
+
+test('get', function callee() {
+	var pool = new Pool;
+	pool
+		.register('sync', function() {
+			return 'sync';
+		})
+		.register('async', function(f) {
+			$.get('./', f);
+			return 'sync back';
+		});
+
+	equals(pool.get('sync'), 'sync');
+	pool.get('sync', function(data) {
+		equals(data, 'sync', 'callback');
+	});
+
+	var args;
+	stop();
+	var ret = Pool.get('async', function() {
+		args = Pool.makeArray(arguments);
+
+		same(pool.get('async', function() {
+			same(Pool.makeArray(arguments), args);
+			return 'async back';
+		}), 'async back', 'cached, sync');
+		same(pool.get('async'), args, 'cached, sync, no use callback');
+		start();
+
+		return 'do nothing';
+	});
+	equals(ret, 'sync back', 'return task value at first');
+});
+
+test('with JSDeferred', function callee() {
+	stop();
+	Pool('parallel',
+		function(f) {
+			Deferred
+				.parallel([$.get('./'), $.get('./')])
+				.next(f);
+		},
+		function(values) {
+			equals(values.length, 2);
+			equals(Pool.at(callee).get('parallel')[0].length, 2, 'cache parallel');
+			start();
+		}
+	);
+});
+</script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
