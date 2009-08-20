@@ -130,7 +130,7 @@ test('get', function callee() {
 		})
 		.register('async', function(f) {
 			$.get('./', f);
-			return 'sync back';
+			return 'sync back'; // through this
 		});
 
 	equals(pool.get('sync'), 'sync');
@@ -139,24 +139,24 @@ test('get', function callee() {
 	});
 
 	var args;
-	stop();
-	var ret = Pool.get('async', function() {
+	var handler = function() {
 		args = Pool.makeArray(arguments);
-
 		equals(
 			pool.get('async', function() {
 				same(Pool.makeArray(arguments), args);
-				return 'async back'; // through this
+				return 'async back';
 			}),
-			undefined,
+			'async back',
 			'cached, sync'
 		);
 		same(pool.get('async'), args, 'cached, sync, no use callback');
 		start();
 
 		return 'do nothing';
-	});
-	equals(ret, 'sync back', 'return task value at first');
+	}
+	stop();
+	var ret = Pool.get('async', handler);
+	equals(ret, undefined, 'return task value at first');
 });
 
 test('with JSDeferred', function callee() {
