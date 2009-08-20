@@ -82,11 +82,9 @@ test('makeArray', function() {
 
 module('Pool Class');
 
-test('init is constractor', function() {
+test('constractor', function() {
 	var pool = new Pool();
 	same(pool.init(), pool, 'return this');
-
-	var pool = new Pool(window);
 });
 
 test('list', function() {
@@ -105,7 +103,7 @@ test('clear', function() {
 	equals(pool.get('foo'), 'foo', 'still exist task');
 
 	pool.clear('foo', true);
-	same(pool.get('foo'), undefined);	
+	same(pool.get('foo'), undefined);
 });
 
 test('register', function() {
@@ -145,10 +143,14 @@ test('get', function callee() {
 	var ret = Pool.get('async', function() {
 		args = Pool.makeArray(arguments);
 
-		same(pool.get('async', function() {
-			same(Pool.makeArray(arguments), args);
-			return 'async back';
-		}), 'async back', 'cached, sync');
+		equals(
+			pool.get('async', function() {
+				same(Pool.makeArray(arguments), args);
+				return 'async back'; // through this
+			}),
+			undefined,
+			'cached, sync'
+		);
 		same(pool.get('async'), args, 'cached, sync, no use callback');
 		start();
 
@@ -175,21 +177,3 @@ test('with JSDeferred', function callee() {
 </script>
 </body>
 </html>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

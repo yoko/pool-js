@@ -24,13 +24,16 @@
  */
 
 Pool = function(name, task, handler) {
+	var context;
 	if (this instanceof Pool) {
-		var context = name || arguments.callee.caller || window;
-		context[Pool.namespace] = this;
+		if (name !== null) {
+			context = name || arguments.callee.caller || window;
+			context[Pool.namespace] = this;
+		}
 		return this.init();
 	}
 
-	var context = arguments.callee.caller || window;
+	context = arguments.callee.caller || window;
 	var pool = Pool.at(context) || new Pool(context);
 	if (name in pool.pool)
 		return pool.get(name, handler);
@@ -42,10 +45,9 @@ Pool.namespace = '__pool__';
 
 Pool.at = function(context) {
 	if (!context) return;
-	if (typeof context == 'string')
-		return Pool['__'+context+'__'];
-	else
-		return context[Pool.namespace];
+	return (typeof context == 'string') ?
+		Pool['__'+context+'__'] :
+		context[Pool.namespace];
 };
 
 Pool.destroy = function(context) {
@@ -69,6 +71,14 @@ Pool.register = function(name, task) {
 
 Pool.get = function(name, handler) {
 	return Pool.at(arguments.callee.caller || window).get(name, handler);
+};
+
+Pool.sessionStorage = function(name, task, handler, options) {
+	if (typeof handler != 'function') {
+		options = handler;
+		handler = undefined;
+	}
+	new Pool.Storage('sessionStorage', name, task, handler, options);
 };
 
 Pool.extend = function(target, options) {
@@ -107,9 +117,10 @@ Pool.prototype = {
 
 	get: function(name, handler) {
 		var self = this;
+		var data;
 
 		if (name in this.pool) {
-			var data = this.pool[name];
+			data = this.pool[name];
 			var bind = ($.isArray(data)) ? 'apply' : 'call';
 			return (typeof handler == 'function') ?
 				handler[bind](null, data) :
@@ -124,12 +135,12 @@ Pool.prototype = {
 
 					return _handler.apply(this, data);
 				};
+				task(handler);
 			}
-
-			var task = this.tasks[name];
-			var data = (typeof task == 'function') ? task(handler) : task;
-			this.pool[name] = data;
-			return data;
+			else {
+				var task = this.tasks[name];
+				return (this.pool[name] = (typeof task == 'function') ? task() : task);
+			}
 		}
 	}
 };
