@@ -110,7 +110,6 @@ Pool.prototype = {
 
 		if (name in this.pool) {
 			var data = this.pool[name];
-			console.log('data', data)
 			var bind = ($.isArray(data)) ? 'apply' : 'call';
 			return (typeof handler == 'function') ?
 				handler[bind](null, data) :
