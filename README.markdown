@@ -2,10 +2,10 @@ Pool
 ====
 pool.jsは処理の結果をプールするJavaScriptライブラリです。
 値を束縛したり、時間の掛かる処理や非同期処理のレスポンスをキャッシュして2度目以降の処理を高速化します。
+キャッシュした値をcookie、sessionStorage、localStorageに保存してキャッシュをページリロードを跨いで利用することも出来ます。
 
 Usage
 -----
-まだ固まっていないため、インターフェースが変わるかもしれません。
 
 ### OOP
 	var pool = new Pool();
@@ -31,4 +31,4 @@ Usage
 
 TODO
 ----
-- Cookie、sessionStorage、localStorageを利用した横断的キャッシュ
+- ドキュメント
