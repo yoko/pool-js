@@ -1,5 +1,5 @@
 /*
- * Pool v0.0
+ * Pool v0.1
  * http://github.com/yoko/pool-js/tree/master
  *
  * Copyright (c) 2009- yksk <http://codefairy.org/>
@@ -50,16 +50,20 @@ Pool.at = function(context) {
 		context[Pool.namespace];
 };
 
-Pool.destroy = function(context) {
+Pool.release = function(context) {
 	if (typeof context == 'string') {
 		var namespace = '__'+context+'__';
 		var pool = Pool[namespace];
-		var tasks = pool.tasks;
-		for (k in tasks) Pool.Storage[context](k, null);
-		delete Pool[namespace];
+		if (pool) {
+			var tasks = pool.tasks;
+			for (k in tasks) Pool.Storage[context](k, null);
+			delete Pool[namespace];
+		}
 	}
-	else
+	else {
+		context = context || arguments.callee.caller || window;
 		delete context[Pool.namespace];
+	}
 };
 
 Pool.register = function(name, task) {
@@ -71,14 +75,6 @@ Pool.register = function(name, task) {
 
 Pool.get = function(name, handler) {
 	return Pool.at(arguments.callee.caller || window).get(name, handler);
-};
-
-Pool.sessionStorage = function(name, task, handler, options) {
-	if (typeof handler != 'function') {
-		options = handler;
-		handler = undefined;
-	}
-	new Pool.Storage('sessionStorage', name, task, handler, options);
 };
 
 Pool.extend = function(target, options) {
@@ -100,17 +96,13 @@ Pool.prototype = {
 		return this;
 	},
 
-	list: function() {
-		return Pool.extend({}, this.pool);
-	},
-
-	clear: function(name, unregister) {
+	remove: function(name) {
 		delete this.pool[name];
-		if (unregister) delete this.tasks[name];
+		delete this.tasks[name];
+		return this;
 	},
 
 	register: function(name, task) {
-		this.clear(name);
 		this.tasks[name] = task;
 		return this;
 	},
@@ -119,28 +111,193 @@ Pool.prototype = {
 		var self = this;
 		var data;
 
+		if (!(name in this.pool)) this.restore(name);
+
 		if (name in this.pool) {
 			data = this.pool[name];
-			var bind = ($.isArray(data)) ? 'apply' : 'call';
+			var bind = (data instanceof Array) ? 'apply' : 'call';
 			return (typeof handler == 'function') ?
 				handler[bind](null, data) :
 				data;
 		}
 		if (name in this.tasks) {
+			var task = this.tasks[name];
 			if (typeof handler == 'function') {
 				var _handler = handler;
 				handler = function() {
 					var data = Pool.makeArray(arguments);
-					self.pool[name] = data;
+					self.save(name, data);
 
 					return _handler.apply(this, data);
 				};
 				task(handler);
 			}
 			else {
-				var task = this.tasks[name];
-				return (this.pool[name] = (typeof task == 'function') ? task() : task);
+				data = (this.pool[name] = (typeof task == 'function') ? task() : task);
+				this.save(name, data);
+				return data;
 			}
 		}
+	},
+
+	save: function(name, data) {
+		this.pool[name] = data;
+		return this;
+	},
+
+	restore: function() {}
+};
+
+
+Pool.Storage = function(storage, name, task, handler, options) {
+	if (this instanceof Pool.Storage) {
+		if (Pool.Storage.support[storage] === undefined) return {};
+		Pool['__'+storage+'__'] = this;
+		options = name;
+		return this.init(storage);
 	}
+
+	if (typeof handler != 'function') {
+		options = handler;
+		handler = undefined;
+	}
+	var pool = Pool.at(storage) || new Pool.Storage(storage);
+	pool.restore(name);
+	if (name in pool.pool)
+		return pool.get(name, handler);
+	else
+		return pool.register(name, task, options).get(name, handler);
+};
+
+Pool.Storage.support = {
+	cookie        : ('cookie' in document),
+	sessionStorage: ('sessionStorage' in window),
+	localStorage  : ('localStorage' in window)
+};
+
+Pool.Storage.cookie = function(name, value, options) {
+	if (!Pool.Storage.support.cookie) return;
+
+	var ret;
+	switch (value) {
+		case undefined:
+			var cookie = document.cookie;
+			if (cookie && cookie != '') {
+				var cookies = cookie.split(';');
+				var n = new RegExp('^'+name+'=(.+)$');
+				for (var i = 0, l = cookies.length; i < l; i++) {
+					var v = n.exec(cookies[i].replace(/^\s+|\s+$/g, ''));
+					if (v) ret = JSON.parse(decodeURIComponent(v[1]));
+				}
+			}
+			break;
+		default:
+			options = options || {};
+			if (value === null) {
+				value = '';
+				options.expires = -1;
+			}
+
+			var params = {
+				expires: options.expires ?
+					new Date(options.expires).toUTCString() :
+					'',
+				path   : options.path || '',
+				domain : options.domain || ''
+			};
+			var p = [];
+			for (var k in params) p.push(k+'='+params[k]);
+			if (options.secure) p.push('secure');
+			p.unshift(encodeURIComponent(JSON.stringify(value)));
+
+			document.cookie = name+'='+p.join(';');
+			ret = true;
+	}
+	return ret;
+};
+
+Pool.Storage.sessionStorage = function(name, value) {
+	if (!Pool.Storage.support.sessionStorage) return;
+
+	var s = window.sessionStorage;
+	var ret;
+	switch (value) {
+		case undefined:
+			var data = s[name];
+			if (name in s) 
+				ret = JSON.parse(data);
+			break;
+		case null:
+			ret = delete s[name];
+			break;
+		default:
+			s[name] = JSON.stringify(value);
+			ret = true;
+	}
+	return ret;
+};
+
+Pool.Storage.localStorage = function(name, value, options) {
+	if (!Pool.Storage.support.localStorage) return;
+
+	var s = window.localStorage;
+	var ret;
+	switch (value) {
+		case undefined:
+			var data = JSON.parse(s[name]);
+			if (data && ('value' in data) &&
+				!(data.options && data.options.expires < new Date().getTime()))
+				ret = data.value;
+			break;
+		case null:
+			ret = delete s[name];
+			break;
+		default:
+			s[name] = JSON.stringify({
+				value  : value,
+				options: options
+			});
+			ret = true;
+	}
+	return ret;
+};
+
+Pool.Storage.prototype = Pool.extend(new Pool(null), {
+	init: function(storage, options) {
+		Pool.prototype.init.call(this);
+		this.storage = storage;
+		this.options = options;
+		return this;
+	},
+
+	remove: function(name) {
+		Pool.prototype.init.call(this, name);
+		Pool.Storage[this.storage](name, null);
+		return this;
+	},
+
+	save: function(name, data) {
+		this.pool[name] = data;
+		var storage = this.storage;
+		Pool.Storage[storage](name, data);
+		return this;
+	},
+
+	restore: function(name) {
+		var storage = this.storage;
+		var data = Pool.Storage[storage](name);
+		if (data !== undefined) this.pool[name] = data;
+		return data;
+	}
+});
+
+new function() {
+	var storages = ['cookie', 'sessionStorage', 'localStorage'];
+
+	for (var i = 0, l = storages.length; i < l; i++) (function(i) {
+		var storage = storages[i];
+		Pool[storage] = function(name, task, handler, options) {
+			return Pool.Storage(storage, name, task, handler, options);
+		}
+	})(i);
 };

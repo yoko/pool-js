@@ -19,15 +19,18 @@
 <script type="text/javascript">
 module('Pool');
 
+Pool('grobal', 'global');
 test('Pool', function callee() {
+	ok(window.__pool__ instanceof Pool, 'bind global');
+
 	var ret = Pool('foo', function() { return 'foo'; });
 	ok(callee.__pool__ instanceof Pool);
 	equals(ret, 'foo');
 
 	var ret = Pool('foo', function() { return 'bar'; });
-	ok(ret, 'foo', 'from cache, through function');
+	equals(ret, 'foo', 'from cache, through function');
 
-	equals(Pool('foo'), 'foo');
+	Pool.release(window);
 });
 
 test('at', function() {
@@ -41,10 +44,20 @@ test('at', function() {
 	same(Pool.at(), undefined);
 });
 
-test('destroy', function callee() {
+test('release', function callee() {
 	var pool = new Pool;
-	Pool.destroy(callee);
-	ok (!('__pool__' in callee), 'delete');
+	Pool.release(callee);
+	same(callee.__pool__, undefined);
+
+	var pool = new Pool;
+	Pool.release();
+	same(callee.__pool__, undefined, 'default target is caller function');
+
+	var pool = new Pool.Storage('sessionStorage');
+	pool.register('foo', 'foo');
+	Pool.release('sessionStorage');
+	same(Pool.__sessionStorage__, undefined, 'delete instance');
+	same(Pool.Storage.sessionStorage('foo'), undefined, 'delete storage');
 });
 
 test('register, get', function callee() {
@@ -60,6 +73,30 @@ test('register, get', function callee() {
 	Pool.get('foo', function(data) {
 		equals(data, 'foo', 'callback');
 	});
+});
+
+test('cookie', function() {
+	var ret = Pool.cookie('foo', 'foo');
+	equals(ret, 'foo');
+	equals(Pool.__cookie__.storage, 'cookie');
+
+	Pool.release('cookie');
+});
+
+test('sessionStorage', function() {
+	var ret = Pool.sessionStorage('foo', 'foo');
+	equals(ret, 'foo');
+	equals(Pool.__sessionStorage__.storage, 'sessionStorage');
+
+	Pool.release('sessionStorage');
+});
+
+test('localStorage', function() {
+	var ret = Pool.localStorage('foo', 'foo');
+	equals(ret, 'foo');
+	equals(Pool.__localStorage__.storage, 'localStorage');
+
+	Pool.release('localStorageremove');
 });
 
 test('extend', function() {
@@ -80,30 +117,18 @@ test('makeArray', function() {
 });
 
 
-module('Pool Class');
-
-test('constractor', function() {
+test('constructor', function callee() {
 	var pool = new Pool();
 	same(pool.init(), pool, 'return this');
+	same(callee.__pool__, pool);
 });
 
-test('list', function() {
-	var pool = new Pool();
-	pool.pool = { a: 1 };
-	same(pool.list(), pool.pool);
-	ok(pool.list() !== pool.pool, 'it is copy');
-});
-
-test('clear', function() {
+test('remove', function() {
 	var pool = new Pool;
 	pool.register('foo', 'foo');
-
-	pool.clear('foo');
-	ok(!('foo' in pool.pool), 'delete');
-	equals(pool.get('foo'), 'foo', 'still exist task');
-
-	pool.clear('foo', true);
-	same(pool.get('foo'), undefined);
+	same(pool.remove('foo'), pool, 'return this');
+	same(pool.pool.foo, undefined, 'no pool');
+	same(pool.get('foo'), undefined, 'no task');
 });
 
 test('register', function() {
@@ -111,7 +136,7 @@ test('register', function() {
 	var f = function() {
 		return 'foo';
 	};
-	same(pool.register('foo', f), pool, 'method chain is ok');
+	same(pool.register('foo', f), pool, 'return this');
 	same(pool.tasks.foo, f, 'register');
 	ok(!('foo' in pool.pool), 'not run yet');
 
@@ -122,15 +147,13 @@ test('register', function() {
 	same(pool.tasks.foo, f2, 'override');
 });
 
-test('get', function callee() {
+test('get', function() {
 	var pool = new Pool;
 	pool
-		.register('sync', function() {
-			return 'sync';
-		})
+		.register('sync', function() { return 'sync'; })
 		.register('async', function(f) {
 			$.get('./', f);
-			return 'sync back'; // through this
+			return 'sync back'; // through
 		});
 
 	equals(pool.get('sync'), 'sync');
@@ -156,7 +179,18 @@ test('get', function callee() {
 	}
 	stop();
 	var ret = Pool.get('async', handler);
-	equals(ret, undefined, 'return task value at first');
+	same(ret, undefined, 'return task value at first');
+});
+
+test('save', function() {
+	var pool = new Pool;
+	same(pool.save('foo', 'bar'), pool, 'return this');
+	equals(pool.get('foo'), 'bar');
+});
+
+test('restore', function() {
+	var pool = new Pool;
+	same(pool.restore(), undefined, 'do nothing');
 });
 
 test('with JSDeferred', function callee() {
@@ -174,6 +208,206 @@ test('with JSDeferred', function callee() {
 		}
 	);
 });
+
+
+module('Pool.Storage');
+
+test('Pool.Storage', function() {
+	var ret = Pool.Storage('sessionStorage', 'foo', function() { return 'foo'; });
+	ok(Pool.__sessionStorage__ instanceof Pool.Storage);
+	equals(ret, 'foo');
+	equals(Pool.Storage.sessionStorage('foo'), 'foo');
+
+	var ret = Pool.Storage('sessionStorage', 'foo', function() { return 'bar'; });
+	equals(ret, 'foo', 'from cache, through function');
+	equals(Pool.Storage.sessionStorage('foo'), 'foo');
+
+	Pool.release('sessionStorage');
+});
+
+test('Pool.Storage.support', function() {
+	var support = Pool.Storage.support;
+	document.cookie = '';
+	ok(support.cookie);
+});
+
+test('Pool.Storage.cookie', function() {
+	var storage = Pool.Storage.cookie;
+	if (Pool.Storage.support.cookie) {
+		var obj = { a: 1 };
+		storage('foo', obj);
+		equals(document.cookie, 'foo=%7B%22a%22%3A1%7D');
+		same(storage('foo'), obj);
+		storage('foo', null);
+		equals(document.cookie, '');
+
+		storage('foo', obj, {
+			expires: new Date().getTime() + 1000
+		});
+		equals(document.cookie, 'foo=%7B%22a%22%3A1%7D');
+		stop();
+		setTimeout(function() {
+			same(storage('foo'), undefined, 'expires');
+
+			var _cookie = Pool.Storage.support.cookie;
+			Pool.Storage.support.cookie = false;
+			same(storage('foo'), undefined, 'not support');
+			Pool.Storage.support.cookie = _cookie;
+
+			Pool.release('cookie');
+			start();
+		}, 1500);
+	}
+});
+
+test('Pool.Storage.sessionStorage', function() {
+	var storage = Pool.Storage.sessionStorage;
+	if (Pool.Storage.support.sessionStorage) {
+		if ('foo' in sessionStorage)
+			equals(storage('foo'), 'foo', 'restore from storage');
+
+		var obj = { a: 1 };
+		storage('foo', obj);
+		same(storage('foo'), obj);
+		storage('foo', null);
+		same(storage('foo'), undefined, 'delete');
+		storage('foo', undefined);
+		same(storage('foo'), undefined, 'this is restore! undefined can not saving');
+
+		storage('foo', 'foo');
+		var _storage = Pool.Storage.support.sessionStorage;
+		Pool.Storage.support.sessionStorage = false;
+		same(storage('foo'), undefined, 'not support');
+		Pool.Storage.support.sessionStorage = _storage;
+	}
+
+	Pool.release('sessionStorage');
+});
+
+test('Pool.Storage.localStorage', function() {
+	var storage = Pool.Storage.localStorage;
+	if (Pool.Storage.support.localStorage) {
+		if ('foo' in localStorage)
+			equals(storage('foo'), 'foo', 'restore from storage');
+
+		var obj = { a: 1 };
+		storage('foo', obj);
+		same(storage('foo'), obj);
+		storage('foo', null);
+		same(storage('foo'), undefined, 'delete');
+		storage('foo', undefined);
+		same(storage('foo'), undefined, 'this is restore! undefined can not saving');
+
+		storage('foo', obj, {
+			expires: new Date().getTime() + 1000
+		});
+		same(storage('foo'), obj, 'still exist');
+		stop();
+		setTimeout(function() {
+			same(storage('foo'), undefined, 'expires');
+
+			storage('foo', 'foo');
+			var _storage = Pool.Storage.support.localStorage;
+			Pool.Storage.support.localStorage = false;
+			same(storage('foo'), undefined, 'not support');
+			Pool.Storage.support.localStorage = _storage;
+
+			Pool.release('localStorage');
+			start();
+		}, 1500);
+	}
+});
+
+
+test('constructor', function() {
+	var pool = new Pool.Storage('sessionStorage');
+	equals(pool.storage, 'sessionStorage');
+	same(Pool.__sessionStorage__, pool);
+
+	Pool.release('sessionStorage');
+});
+
+test('remove', function() {
+	var pool = new Pool.Storage('sessionStorage');
+	pool.register('foo', 'foo');
+	same(pool.remove('foo'), pool, 'return this');
+	same(pool.pool.foo, undefined, 'no pool');
+	same(pool.get('foo'), undefined, 'no task');
+	same(pool.restore('foo'), undefined, 'no storage');
+
+	Pool.release('sessionStorage');
+});
+
+test('register', function() {
+	var pool = new Pool.Storage('sessionStorage');
+	var f = function() {
+		return 'foo';
+	};
+	same(pool.register('foo', f), pool, 'return this');
+	same(pool.tasks.foo, f, 'register');
+	ok(!('foo' in pool.pool), 'not run yet');
+
+	var f2 = function() {
+		return 'bar';
+	};
+	pool.register('foo', f2);
+	same(pool.tasks.foo, f2, 'override');
+
+	Pool.release('sessionStorage');
+});
+
+test('get', function callee() {
+	var pool = new Pool.Storage('sessionStorage');
+	pool
+		.register('sync', function() { return 'sync'; })
+		.register('async', function(f) { $.get('./', f); });
+
+	equals(pool.get('sync'), 'sync');
+	pool.get('sync',
+		function(data) {
+			equals(data, 'sync', 'sync callback');
+		}
+	);
+
+	stop();
+	var ret = pool.get('async', function() {
+		var args = Pool.makeArray(arguments);
+
+		var ret = pool.get('async', function() {
+			same(Pool.makeArray(arguments), args);
+			return 'async back';
+		});
+		equals(ret, 'async back', 'cached, sync');
+
+		same(pool.get('async'), args, 'cached, sync, no use callback');
+		same(pool.restore('async'), args, 'storage');
+
+		Pool.release('sessionStorage');
+		start();
+
+		return 'do nothing';
+	});
+	same(ret, undefined, 'return task value at first');
+});
+
+test('save', function() {
+	var pool = new Pool.Storage('sessionStorage');
+	same(pool.save('foo', 'bar'), pool, 'return this');
+	equals(pool.get('foo'), 'bar');
+	equals(Pool.Storage.sessionStorage('foo'), 'bar');
+
+	Pool.release('sessionStorage');
+});
+
+test('restore', function() {
+	var pool = new Pool.Storage('sessionStorage');
+	Pool.Storage.sessionStorage('foo', 'bar');
+	equals(pool.restore('foo'), 'bar');
+	equals(pool.get('foo'), 'bar');
+
+	Pool.release('sessionStorage');
+});
+
 </script>
 </body>
 </html>
