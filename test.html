@@ -147,39 +147,38 @@ test('register', function() {
 	same(pool.tasks.foo, f2, 'override');
 });
 
-test('get', function() {
-	var pool = new Pool;
+test('get', function callee() {
+	var pool = new Pool.Storage('sessionStorage');
 	pool
 		.register('sync', function() { return 'sync'; })
 		.register('async', function(f) {
 			$.get('./', f);
-			return 'sync back'; // through
+			return 'do nothing';
 		});
 
 	equals(pool.get('sync'), 'sync');
-	pool.get('sync', function(data) {
-		equals(data, 'sync', 'callback');
-	});
+	pool.get('sync',
+		function(data) {
+			equals(data, 'sync', 'sync callback');
+		}
+	);
 
-	var args;
-	var handler = function() {
-		args = Pool.makeArray(arguments);
-		equals(
-			pool.get('async', function() {
-				same(Pool.makeArray(arguments), args);
-				return 'async back';
-			}),
-			'async back',
-			'cached, sync'
-		);
+	stop();
+	var ret = pool.get('async', function() {
+		var args = Pool.makeArray(arguments);
+
+		var ret = pool.get('async', function() {
+			same(Pool.makeArray(arguments), args);
+			return 'do nothing';
+		});
+		same(ret, undefined, 'cached, sync');
+
 		same(pool.get('async'), args, 'cached, sync, no use callback');
 		start();
 
 		return 'do nothing';
-	}
-	stop();
-	var ret = Pool.get('async', handler);
-	same(ret, undefined, 'return task value at first');
+	});
+	same(ret, undefined);
 });
 
 test('save', function() {
@@ -375,9 +374,9 @@ test('get', function callee() {
 
 		var ret = pool.get('async', function() {
 			same(Pool.makeArray(arguments), args);
-			return 'async back';
+			return 'do nothing';
 		});
-		equals(ret, 'async back', 'cached, sync');
+		same(ret, undefined, 'cached, sync');
 
 		same(pool.get('async'), args, 'cached, sync, no use callback');
 		same(pool.restore('async'), args, 'storage');
@@ -387,7 +386,7 @@ test('get', function callee() {
 
 		return 'do nothing';
 	});
-	same(ret, undefined, 'return task value at first');
+	same(ret, undefined);
 });
 
 test('save', function() {

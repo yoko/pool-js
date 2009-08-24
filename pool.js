@@ -1,5 +1,5 @@
 /*
- * Pool v0.1
+ * Pool v0.1.1
  * http://github.com/yoko/pool-js/tree/master
  *
  * Copyright (c) 2009- yksk <http://codefairy.org/>
@@ -116,9 +116,10 @@ Pool.prototype = {
 		if (name in this.pool) {
 			data = this.pool[name];
 			var bind = (data instanceof Array) ? 'apply' : 'call';
-			return (typeof handler == 'function') ?
-				handler[bind](null, data) :
-				data;
+			if (typeof handler == 'function')
+				handler[bind](null, data);
+			else
+				return data;
 		}
 		if (name in this.tasks) {
 			var task = this.tasks[name];
