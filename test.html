@@ -225,13 +225,13 @@ test('Pool.Storage', function() {
 	Pool.release('sessionStorage');
 });
 
-test('Pool.Storage.support', function() {
+test('support', function() {
 	var support = Pool.Storage.support;
 	document.cookie = '';
 	ok(support.cookie);
 });
 
-test('Pool.Storage.cookie', function() {
+test('cookie', function() {
 	var storage = Pool.Storage.cookie;
 	if (Pool.Storage.support.cookie) {
 		var obj = { a: 1 };
@@ -260,12 +260,9 @@ test('Pool.Storage.cookie', function() {
 	}
 });
 
-test('Pool.Storage.sessionStorage', function() {
+test('sessionStorage', function() {
 	var storage = Pool.Storage.sessionStorage;
 	if (Pool.Storage.support.sessionStorage) {
-		if ('foo' in sessionStorage)
-			equals(storage('foo'), 'foo', 'restore from storage');
-
 		var obj = { a: 1 };
 		storage('foo', obj);
 		same(storage('foo'), obj);
@@ -284,12 +281,9 @@ test('Pool.Storage.sessionStorage', function() {
 	Pool.release('sessionStorage');
 });
 
-test('Pool.Storage.localStorage', function() {
+test('localStorage', function() {
 	var storage = Pool.Storage.localStorage;
 	if (Pool.Storage.support.localStorage) {
-		if ('foo' in localStorage)
-			equals(storage('foo'), 'foo', 'restore from storage');
-
 		var obj = { a: 1 };
 		storage('foo', obj);
 		same(storage('foo'), obj);

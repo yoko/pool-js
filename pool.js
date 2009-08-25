@@ -1,5 +1,5 @@
 /*
- * Pool v0.1.1
+ * Pool v0.1.2
  * http://github.com/yoko/pool-js/tree/master
  *
  * Copyright (c) 2009- yksk <http://codefairy.org/>
@@ -177,7 +177,7 @@ Pool.Storage.support = {
 };
 
 Pool.Storage.cookie = function(name, value, options) {
-	if (!Pool.Storage.support.cookie) return;
+	if (!Pool.Storage.support.cookie || !name) return;
 
 	var ret;
 	switch (value) {
@@ -218,15 +218,16 @@ Pool.Storage.cookie = function(name, value, options) {
 };
 
 Pool.Storage.sessionStorage = function(name, value) {
-	if (!Pool.Storage.support.sessionStorage) return;
+	if (!Pool.Storage.support.sessionStorage || !name) return;
 
 	var s = window.sessionStorage;
 	var ret;
 	switch (value) {
 		case undefined:
-			var data = s[name];
-			if (name in s) 
+			if (s[name] !== undefined) {
+				var data = s[name];
 				ret = JSON.parse(data);
+			}
 			break;
 		case null:
 			ret = delete s[name];
@@ -239,16 +240,18 @@ Pool.Storage.sessionStorage = function(name, value) {
 };
 
 Pool.Storage.localStorage = function(name, value, options) {
-	if (!Pool.Storage.support.localStorage) return;
+	if (!Pool.Storage.support.localStorage || !name) return;
 
 	var s = window.localStorage;
 	var ret;
 	switch (value) {
 		case undefined:
-			var data = JSON.parse(s[name]);
-			if (data && ('value' in data) &&
-				!(data.options && data.options.expires < new Date().getTime()))
-				ret = data.value;
+			if (s[name] !== undefined) {
+				var data = JSON.parse(s[name]);
+				if (data && ('value' in data) &&
+					!(data.options && data.options.expires < new Date().getTime()))
+					ret = data.value;
+			}
 			break;
 		case null:
 			ret = delete s[name];
