@@ -115,9 +115,11 @@ Pool.prototype = {
 
 		if (name in this.pool) {
 			data = this.pool[name];
-			var bind = (data instanceof Array) ? 'apply' : 'call';
-			if (typeof handler == 'function')
+			if (typeof handler == 'function') {
+				var bind = (data instanceof Array) ? 'apply' : 'call';
 				handler[bind](null, data);
+				return;
+			}
 			else
 				return data;
 		}
