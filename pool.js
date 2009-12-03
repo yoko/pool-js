@@ -1,6 +1,6 @@
 /*
- * Pool v0.1.3
- * http://github.com/yoko/pool-js/tree/master
+ * Pool v0.1.4
+ * http://github.com/yoko/pool-js
  *
  * Copyright (c) 2009- yksk <http://codefairy.org/>
  *
@@ -23,18 +23,23 @@
  * THE SOFTWARE.
  */
 
-Pool = function(name, task, handler) {
-	var context;
+Pool = function(context, name, task, handler) {
 	if (this instanceof Pool) {
-		if (name !== null) {
-			context = name || arguments.callee.caller || window;
+		if (context !== null) {
+			context = context || arguments.callee.caller || window;
 			context[Pool.namespace] = this;
 		}
 		return this.init();
 	}
 
-	context = arguments.callee.caller || window;
+	if (typeof context == 'string') {
+		handler = task;
+		task    = name;
+		name    = context;
+		context = arguments.callee.caller || window;
+	}
 	var pool = Pool.at(context) || new Pool(context);
+
 	if (name in pool.pool)
 		return pool.get(name, handler);
 	else
@@ -116,8 +121,10 @@ Pool.prototype = {
 		if (name in this.pool) {
 			data = this.pool[name];
 			if (typeof handler == 'function') {
-				var bind = (data instanceof Array) ? 'apply' : 'call';
-				handler[bind](null, data);
+				setTimeout(function() {
+					var bind = (data instanceof Array) ? 'apply' : 'call';
+					handler[bind](null, data);
+				});
 				return;
 			}
 			else

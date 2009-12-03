@@ -17,10 +17,15 @@
 <ol id="qunit-tests"></ol>
 
 <script type="text/javascript">
-module('Pool');
+module('Pool', {
+	teardown: function() {
+		Pool.release(window);
+	}
+});
 
-Pool('grobal', 'global');
+
 test('Pool', function() {
+	equals(Pool(window, 'grobal', 'global'), 'global');
 	ok(window.__pool__ instanceof Pool, 'bind global');
 
 	var ret = Pool('foo', function() { return 'foo'; });
@@ -28,8 +33,6 @@ test('Pool', function() {
 	equals(ret, 'foo');
 	var ret = Pool('foo', function() { return 'bar'; });
 	equals(ret, 'foo', 'from cache, through task function');
-
-	Pool.release(window);
 });
 
 test('at', function() {
@@ -183,6 +186,10 @@ test('get', function callee() {
 	same(ret, undefined);
 });
 
+test('update', function() {
+	
+});
+
 test('save', function() {
 	var pool = new Pool;
 	same(pool.save('foo', 'bar'), pool, 'return this');
@@ -212,21 +219,31 @@ test('with JSDeferred', function() {
 });
 
 test('inside class', function() {
+	var id = 0;
 	var Klass = function() {};
 	Klass.prototype = {
-		uid: function() {
-			return Pool('uid', function() { return new Date().getTime(); });
+		shared_id: function() {
+			return Pool('uid', function() { return id++; });
+		},
+		class_id: function() {
+			return Pool(this, 'uid', function() { return id++; });
 		}
 	};
 
 	var klass = new Klass;
-	var uid = klass.uid();
-	ok(klass.uid.__pool__ instanceof Pool);
-	equals(Klass.prototype.uid.__pool__, undefined);
+	klass.shared_id();
+	klass.class_id();
+	ok(Klass.prototype.shared_id.__pool__ instanceof Pool, 'bind to prototype object!');	
+	ok(klass.shared_id.__pool__ instanceof Pool, 'prototype chain');
+	ok(klass.__pool__ instanceof Pool);
+	same(Klass.prototype.__pool__, undefined);
 
 	var klass2 = new Klass;
-	var uid2 = klass2.uid();
-	ok(uid2 != uid, 'define new instance');
+	var id1 = klass2.shared_id();
+	var id2 = klass2.class_id();
+	var klass3 = new Klass;
+	equals(id1, klass3.shared_id());
+	ok(id2 != klass3.class_id());
 });
 
 
